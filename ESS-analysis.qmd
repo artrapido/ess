@@ -1,0 +1,230 @@
+---
+title: "ESS-analysis"
+author: "Sergey Polyarus"
+format: html
+editor: visual
+---
+
+## Data
+
+The dataset provides for information on politically related surveys conducted in Europe periodically since the year 2001. It contains information about both political issues and personal data of the respondents.
+Variables' transcript may be found at https://www.europeansocialsurvey.org/
+
+```{python}
+import pandas as pd
+import seaborn as sns
+import statsmodels
+import matplotlib.pyplot as plt
+import pycountry as py
+import pycountry_convert as pyco
+import numpy as np
+from numpy import nan
+df = pd.read_csv("data.csv", na_filter=False, low_memory=False)
+```
+
+## What is the ranking of European countries with respect to of average satisfaction with life?
+```{python}
+df.cntry.replace(to_replace='XK', value = 'RS', inplace=True)
+df = df.assign(Year = 2002+(df.essround-1)*2)
+df['Country'] = df['cntry'].apply(lambda x: pyco.country_alpha2_to_country_name(x))
+
+
+stflifedata = df.loc[df['stflife']<11]
+stflifedata = stflifedata.groupby(['Country','Year'])['stflife'].mean().reset_index()
+stflifedata = stflifedata.pivot(index='Country',columns='Year',values='stflife')
+stflifedata = stflifedata.sort_values(by=[2018],ascending=False)
+stflifedata
+```
+The table shows rather evident things: West and North Europe feel better, then comes Central and South Europe, and the worst numbers correspond with former Warsaw Pact countries. Remarkable observations here are Spain (too high for South Europe), the UK (too low for West Europe country - and too close to Ireland which is way less developed), France (too low for this level of development). 
+
+## A visualization where you first count the number of individuals each combination of valid values of atchctr and atcherp
+```{python}
+df.atchctr=df.atchctr.apply(lambda x: 99 if ((x=='') | (pd.isna(x))) else int(x))
+df.atcherp=df.atcherp.apply(lambda x: 99 if ((x=='') | (pd.isna(x))) else int(x))
+
+dfattach = df.loc[(df['atchctr']<11)&(df['atcherp']<11)]
+valuetable = pd.crosstab(df['atchctr'],df['atcherp']).reset_index()[['atchctr',  0.0,  1.0,  2.0,  3.0,  4.0, 5.0,  6.0,  7.0,  8.0,  9.0, 10.0]].loc[0:10]
+pd.crosstab(dfattach['atchctr'],dfattach['atcherp'])
+
+dfattach = df.loc[(df['atchctr']<11)&(df['atcherp']<11)]
+valuetablelong =dfattach[['atchctr','atcherp']].value_counts().reset_index()
+
+dfattach = df.loc[(df['atchctr']<11)&(df['atcherp']<11)]
+valuetablelong =dfattach[['atchctr','atcherp']].value_counts().reset_index()
+valuetablelong = valuetablelong.rename(columns={0:'NumIndividuals'})
+
+sns.relplot(data=valuetablelong,x='atchctr',y='atcherp',size='NumIndividuals',hue='NumIndividuals')
+```
+As we can see, the only superior combination in terms of its frequency is (10, 10), and overall the most frequent result is coincidence of high values of both variables.
+.
+```{python}
+sns.regplot(x=dfattach['atchctr'], y = dfattach['atcherp'], lowess = True, scatter=False)
+plt.show()
+```
+The line differs from y=x, but in general positive correlation between national attachment and european attachment is clear. The more average European is attached to his country, the more he is usually attached to Europe in general. In such a way, being attached to a country does not contradict being attached to the entire continent.This might display presence of a common European identity. 
+
+The same lines for different states look like:
+```{python}
+g = sns.FacetGrid(dfattach, col="Country", col_wrap=5)
+g.map_dataframe(sns.regplot,y='atcherp',x='atchctr',scatter=False,lowess=True)
+plt.show()
+```
+
+Here we may observe the contrast in this correlation among different countries. The interesting thing we cannot even grasp a tendency of West block vs. East block, North vs. South, Large vs Small etc. It is all very individual.
+
+## What is the relation of the emotional attachment to the own country and the opinion about further of European unification?
+
+```{python}
+dfatceuf=df[(df['atchctr']<11)&(df['euftf']<11)]
+sns.regplot(data=dfatceuf, x='atchctr', y = 'euftf', lowess = True, scatter=False)
+plt.show()
+```
+The euftf column is about attitude to European unification, where 0 is "Unification already gone too far" and 10 is "Unification go further". So break 5 of the scale may be regarded as a watershed between positive and negative attitude to further European unification. Indeed, we may observe that between the euftf's 5.0 and 5.5 breaks the atchctr begins to decrease noticeably. In other words, after a man becomes more pro-unificationist, his attachment to the country is likely to decline. Unlike the variables from the previous question, these two variables may actually be chosen as juxtaposition indicators of "the national" and "the European" in the respondent's views.
+
+## How many observations are there for each country-year combination?
+
+```{python}
+valuedf = df[['Year', 'Country']].value_counts().reset_index()
+valuedf = valuedf.rename(columns={0:"NumCombinations"})
+valuedf = valuedf.pivot(index = "Country", values = "NumCombinations", columns = "Year")
+valuedf = valuedf.reset_index()
+valuedf
+```
+No, the numbers are not proportional to the population, e.g. roughly the same number of respondents is presented for majority of countries regardless of their population size. The only shortcoming for qq. 2 and 3 is that the data collected for large countries (like Germany) is less representative than the data collected for smaller countries like Latvia. Since we cannot assume that the data is representative for large countries, we should note that attitude of the European people to integration may be different (as a large amount of European population is  presented in the survey equally with lesser parts of it). In other words, opinion of smaller countries' population may be overvalued. 
+
+## What is the correlation between attitude to the European unification and left-right political scale position (the lrscale variable). The lrscale is designed as following: 0 is extremely left and 10 is extremely right.
+```{python}
+dflrsc = df[(df.lrscale<11)&(df['euftf']<11)]
+graph = sns.regplot(data=dflrsc, x='lrscale', y = 'euftf', lowess = True, scatter=False)
+graph.axes.set_xlim(0,10)
+graph
+```
+The graph is showing that the left and the right are not opposing each other in terms of European unification as hard as we tend to think. The negative correlation (the righter - the more anti-unification) is seen below the 6 break of lrscale only, and then the graph changes its diretion. In such a way, the extreme right and the extreme left are more likely to share common view on necessity of further European unification than any of them and a centrist.
+
+
+## What are the correlations between life satisfaction, trust in the police, religiosity, emotional attachment to Europe, and social activity?
+```{python}
+dfqsix = df.loc[df['essround']==9] 
+dfqsix =  dfqsix[['stflife', 'trstplc', 'rlgdgr', 'atcherp', 'sclact']]
+dfqsix.corr()
+sns.heatmap(dfqsix.corr(), center = 0.6)
+plt.show()
+```
+Here we observe that each point of life satisfaction adds to trust to police more than to other variables. In my opinion, this happens because while assessing satisfaction of life people implicitly give feedback to the state that organizes this very life, i. e. state authorities and their activities mean a lot to rate life satisfaction. Police is one of the most important state authorities, that is why these two variables correlate.
+Then comes correlation between social activities and life satisfaction. I assume this may be explained by the fact that social activities let people fulfill their communication capability and make them more satisfied.
+The least correlated pairs are social activity rate and police trust rate (this seems to be not only correlation issue but an issue of actual absence of a link) and the being religious rate and social activity rate (this seems stranger since religions usually encourage conciliarity). 
+
+## Which variables can explain the variance of life satisfaction in a linear model how well?
+```{python}
+import statsmodels.formula.api as smf
+dfqsev = dfqsix
+cols = dfqsev.columns
+dfqsev[cols] = dfqsev[cols].apply(pd.to_numeric)
+results = smf.ols('stflife ~ trstplc + rlgdgr + atcherp + sclact', data=dfqsev).fit()
+results.summary()
+```
+These four variables explain 2.6% of the stflife variance. Not a lot. This means that life satisfaction is rather formed by other predictors.
+
+## How well can life satisfaction predict voting behavior?
+```{python}
+import statsmodels.api as sm
+dfvote = df.drop(df[df.vote > 2].index)
+dfvote.vote.replace(to_replace=[2], value = 0, inplace=True)
+dfvote = dfvote[dfvote['stflife'].notna()]
+dfvote = sm.add_constant(dfvote)
+results = sm.Logit(dfvote['vote'], dfvote[['stflife', 'const']]).fit(method='bfgs')
+print(results.summary())
+#slope = 0.1141 
+#intercept =  0.4745
+dfvoteplot = dfvote[['stflife', 'const']]
+dfvoteplot['stflifexslope'] = dfvoteplot['stflife']*0.1141
+dfvoteplot['const'] = 0.4745
+dfvoteplot['x'] = dfvoteplot['stflifexslope'] + dfvoteplot['const']
+dfvoteplot['y'] = 0
+dfvoteplot['y'] = dfvoteplot['x'].apply(lambda x: np.exp(x)/(1+np.exp(x)))
+sns.scatterplot(x = dfvoteplot['stflife'], y = dfvoteplot['y'])
+plt.show()
+```
+This plot shows that the greater stflife is, the greater voting probability appears. However, pseudo R-squ. is extremely low, so we should better look for other predictors. The relation of the independent and the dependent value we discovered may be a coincidence (despite the p value being 0).
+Another dissatisfying aspect is that the any stflife level that leads to voting result is 0 (if stflife == 0, probability = 0.61644, so the person is  always more likely to vote than not to vote).
+In such a way, the model is not useful.
+
+```{python}
+ct1 = pd.crosstab(index = dfvote['vote'], columns = dfvote['stflife']).reset_index().drop('vote', axis=1)
+ct2 = ct1.transpose().reset_index().melt(id_vars=['stflife'])
+ct2 = ct2.rename(columns={'value': 'Number of observations', 'variable' : 'Voter (1) or not (0)'})
+ax = sns.barplot(data = ct2, x=ct2['stflife'], y = ct2['Number of observations'], hue = 'Voter (1) or not (0)')
+plt.show()
+```
+The barplot where we may observe: the number of voters is indeed larger for any stflife value, but non-voters also exist in each category. This prooves the fit performed above was not realistic.
+
+## How can we improve the prediction of voters?
+```{python}
+dfvoteqn = df[['stflife', 'polintr','euftf', 'trstplc', 'imueclt', 'atchctr', 'vote']]
+dfvoteqn = sm.add_constant(dfvoteqn)
+dfvoteqn.euftf.replace(to_replace=[77, 88, 99], value = None, inplace=True)
+dfvoteqn.atchctr.replace(to_replace=['','77', '88', '99'], value = None, inplace=True)
+dfvoteqn.trstplc.replace(to_replace=[77, 88, 99], value = None, inplace=True)
+dfvoteqn.imueclt.replace(to_replace=[77, 88, 99], value = None, inplace=True)
+dfvoteqn = dfvoteqn[dfvoteqn['polintr']<7]
+dfvoteqn= dfvoteqn[dfvoteqn['vote'] <= 2]
+dfvoteqn['vote'].replace(to_replace=[2], value = 0, inplace=True)
+dfvoteqn = dfvoteqn.dropna()
+
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(dfvoteqn[['stflife', 'polintr','euftf', 'trstplc', 'imueclt', 'atchctr', 'const']], dfvoteqn['vote'], test_size=0.2, random_state=228)
+
+results = sm.Logit(y_train, X_train[['stflife', 'polintr','euftf', 'trstplc', 'imueclt', 'atchctr', 'const']].astype(float)).fit(method='bfgs')
+print(results.summary())
+
+from sklearn.metrics import (confusion_matrix,           accuracy_score)
+X_test = X_test[['stflife', 'polintr','euftf', 'trstplc', 'imueclt', 'atchctr', 'const']].astype(int)
+yhat = results.predict(X_test[['stflife', 'polintr','euftf', 'trstplc', 'imueclt', 'atchctr', 'const']])
+prediction = list(map(round, yhat))
+cm = confusion_matrix(y_test, prediction) 
+print ("Confusion Matrix : \n", cm) 
+print('Test accuracy = ', accuracy_score(y_test, prediction))
+```
+The model now splits 80% of people into voters and non-voters correctly. However, the false positive rate remains relatively high (if we compare it to false negative), which means that the model considers people to be more eager to vote than they actually are. 
+
+## How do country variables change the prediction?(with statsmodels)
+```{python}
+dfvote = pd.concat([dfvote[['stflife', 'const']], pd.get_dummies(dfvote.cntry, drop_first=True), dfvote['vote']], axis=1)
+X_train, X_test, y_train, y_test = train_test_split(dfvote.iloc[:, 0:31], dfvote['vote'], test_size=0.2, random_state=228)
+resultssm = sm.Logit(y_train, X_train).fit(method='bfgs')
+print(resultssm.summary())
+#slope = 0.0851
+#intercept =  0.6967
+#+dumies
+yhat = resultssm.predict(X_test)
+prediction = list(map(round, yhat))
+cm = confusion_matrix(y_test, prediction) 
+print ("Confusion Matrix : \n", cm) 
+```
+The results do not differ from the simplest one that much, but at least the model can now predict non-voters (however, just a tiny proportion of them). This means that country explains a valid part of variance of voting probability though the proportion of additionally explained variance does not permit to fit a model with over 80 accuracy.
+
+## How do country variables change the prediction?(with sklearn)
+```{python}
+from sklearn.linear_model import LogisticRegression
+from sklearn import metrics
+results = LogisticRegression(solver = 'saga').fit(X_train, y_train)
+print(results.coef_)
+y_hat = results.predict(X_test)
+print(results.score(X_test, y_test))
+cm = metrics.confusion_matrix(y_test, y_hat) 
+print ("Confusion Matrix : \n", cm)
+#slope = 0.0814
+#intercept =  0.1333
+#+dummies
+```
+The model by sklearn performs exactly like the model without country dummies (found it by chance). Allegedly it is due to the method used: statsmodels fitting performs the same not only without country dummies, but also if the method is changed to 'newton', for example. Unfortunately, no solver (equivalent of method) type from sklearn permits to tune the model in the same way. 
+
+```{python}
+coefdf = pd.DataFrame({'var_name': dfvote.columns[0:31],'skl':results.coef_[0], 'stm': resultssm.params.reset_index()[0]})
+ax = plt.subplots()
+ax = sns.barplot(y=coefdf.var_name, x=coefdf.skl, color='b', orient = 'h', alpha = 0.5)
+ax = sns.barplot(y=coefdf.var_name, x=coefdf.stm, color='r', orient = 'h', alpha = 0.5)
+ax.set(xlabel="Coefficients: Statsmodels - red-like, Sklearn - blue-like", ylabel="Predictors")
+plt.show()
+```
+Most of the coefficients do not vary greatly, but some of them even have different signs. Thus models that are very alike and differ only by method treat some countries as increasing or decreasing voting probability in opposite way.
